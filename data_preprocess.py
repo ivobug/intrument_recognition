@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Mar 30 23:40:16 2023
+Created on Fri Apr 14 09:15:47 2023
 
 @author: Ivan
 """
+
 
 import pandas as pd
 import os
@@ -14,8 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import soundfile
 import glob
-import seaborn as sn
-
+import soundfile as sf
 
 
 
@@ -41,6 +41,7 @@ for root, dirs, files in os.walk(train_path, topdown=True):
 
 df=df.fillna(0)
 #df.to_csv('out.csv')
+
 
 files_list =df.index.values.tolist()
 
@@ -73,7 +74,7 @@ three_elem_samples=createCombinations(sep_files_list, 3,int(TOTAL_SAMPLES*THREE_
 [one_elem_samples.extend(l) for l in (two_elem_samples,three_elem_samples)]
 
 
-df_spectogram= pd.DataFrame( columns=columns)
+df_train= pd.DataFrame( columns=columns)
 #samples=[ two_elem_samples[:10]]
 
 for combination in one_elem_samples:
@@ -94,34 +95,16 @@ for combination in one_elem_samples:
     
     
     ###################################################
-    Xdb_mel.extend(listOfOnes)
+    new_audio=[sum(audios)]
+    new_audio.extend(listOfOnes)
     columns=['file']
     columns.extend(classes)
-    new_row = pd.Series(Xdb_mel, index=columns)
-    df_spectogram = pd.concat([df_spectogram, new_row.to_frame().T], ignore_index=True)
+    new_row = pd.Series(new_audio, index=columns)
+    df_train = pd.concat([df_train, new_row.to_frame().T], ignore_index=True)
      
     
-df_spectogram=df_spectogram.fillna(0)
+df_train=df_train.fillna(0)
 
-
-
-def plot_images(rows,columns, inst=False, n_inst=False ):
-    
-    fig = plt.figure(figsize=(10, 7))
-    ite=[x for x in range(rows*columns)] 
-    temporary_df=df_spectogram
-    if(n_inst!=False):
-        temporary_df=df_spectogram[df_spectogram.drop(['file'], axis=1).sum(axis = 1)==n_inst]
-    for i in ite:
-        fig.add_subplot(rows, columns, i+1)
-        if(inst!=False):
-            listOfImages=temporary_df[temporary_df[inst]==1]['file'].tolist()
-            plt.imshow(listOfImages[i])
-            plt.title(f"{list(temporary_df[temporary_df[inst]==1].drop(['file'], axis=1).iloc[i][temporary_df[temporary_df[inst]==1].drop(['file'], axis=1).iloc[i].eq(1)].keys())}")
-        else: 
-            plt.imshow(df_spectogram['file'][i])
-            plt.title(f"{list(temporary_df.drop(['file'], axis=1).loc[i][temporary_df.drop(['file'], axis=1).loc[i].eq(1)].keys())}")
-        plt.axis('off')
         
     
 
@@ -156,25 +139,6 @@ def addNoise(noise_val):
 normal_noise_value=0.005
 
 
-###################################################################
-#---------------------------PLAY HERE------------------------------
-###################################################################
-
-#To run this function you have to input num of rows and cols,
-# and if you want you can specify instrument and num of combinations
-
-plot_images(2,2)
-plot_images(2,2,'voi',1)
-plot_images(2,2,'voi',2)
-
-#This function will plot spectogram of random audio and same audio + noise
-#Also it will save both audios in current folder
-#You have to provide noise value
-addNoise(0.010)
-
-
-##################################################################
-#Create Validation dataframe
 
 val_path='Dataset/IRMAS_Validation_Data'
 val_df = pd.DataFrame( columns=columns)
@@ -194,64 +158,29 @@ for file in text_files:
     columns.extend(classes)
     
     signal, sr = lr.load(os.path.join(val_path,fileName+ '.' + wav_suffix))
-    S = lr.feature.melspectrogram(y=new_audio, sr=22050, win_length=256, hop_length=512)
-    Xdb_mel = [lr.amplitude_to_db(abs(S))]
+    Signal=[signal]
     listOfOnes = [1] * len(classes)
-    Xdb_mel.extend(listOfOnes)
+    Signal.extend(listOfOnes)
     
-    new_row = pd.Series(Xdb_mel, index=columns)
+    new_row = pd.Series(Signal, index=columns)
     val_df = pd.concat([val_df, new_row.to_frame().T], ignore_index=True)
     
 val_df=val_df.fillna(0)
 
 #Add extra column to train and validation data
 val_df['hot_enc']=(val_df.drop(['file'],1).values).tolist()
-df_spectogram['hot_enc']=(df_spectogram.drop(['file'],1).values).tolist()
+df_train['hot_enc']=(df_train.drop(['file'],1).values).tolist()
+
 
 #save Dataframes to csv
-os.makedirs('data', exist_ok=True)  
-val_df.to_csv('data/train.csv')  
-df_spectogram.to_csv('data/val.csv') 
-
-
-
-####Correlation between instruments
-    
-columns=['file','cel', 'cla', 'flu', 'gac', 'gel', 'org', 'pia', 'sax', 'tru', 'vio', 'voi']
-resarch_df = pd.DataFrame( columns=columns[1:])
-
-def inst_correlation(inst):
-    base= val_df.drop(['file',inst,'hot_enc'],1)[val_df[inst].eq(1)].sum()
-    return base.tolist(), base.keys().tolist()
-
-for i in columns[1:]:
-    values, keys=inst_correlation(i)
-    resarch_df = resarch_df.append(pd.Series(values, index = keys), ignore_index=True)
-resarch_df.index=columns[1:]
-resarch_df=resarch_df.fillna(0)
-
-plt.figure(figsize = (10,7))
-sn.heatmap(resarch_df, annot=True, fmt='g')
-
-
 def save_data(df, name):
     os.makedirs(f'data/{name}', exist_ok=True)
     
-    for i in df['file']:
-        print(i)
-    
+    for i in range(len(df['file'])):
+        sf.write(f'data/{name}/{i}.wav', df['file'].iloc[i], 22050, 'PCM_24')
+
     df=df.drop(['file'],axis=1)
     df.to_csv(f'data/{name}.csv') 
     
-save_data(df_spectogram, 'train')
-
-df_spectogram['file'].iloc[0]
-
-
-    
-im1 = Image.fromarray(df_spectogram['file'].iloc[0]) 
-# save a image using extension
-im1 = im1.save("geeks.jpg") 
-    
-    
-
+save_data(df_train, 'train')
+save_data(val_df, 'val')
